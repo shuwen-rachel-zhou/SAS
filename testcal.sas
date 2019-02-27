@@ -1,4 +1,4 @@
-%include "/programs/users/jpark/library/calendar.sas";
+%include "/";
 
 %calendar(date=201109,n=100);
 
