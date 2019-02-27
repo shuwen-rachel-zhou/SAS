@@ -1,6 +1,5 @@
 /************************************************************************************/
 /* PROGRAM NAME		: calendar.sas                                              */
-/* AUTHOR		: Jin Won Park                                              */
 /* PURPOSE		: Calendar Macro Function. Saves date vairables in different*/
 /*			  formats.                                                  */
 /* EXAMPLES		: date0 = 201101					    */
