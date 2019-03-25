@@ -16,9 +16,9 @@ proc printto log="/integration/37_dashboarding/&currdate./logs/portfolio_snapsho
 %let prevyr=2006;     	/* year of first month of tli data shouldn't change */
 %let endzip=201501;     /* date of first month that is zipped */
 
-%include "/programs/users/jpark/library/calendar.sas";
-%include "/programs/users/jpark/library/zip.sas";
-%include "/programs/users/jpark/library/unzip.sas";
+%include "/programs/users/rzhou/library/calendar.sas";
+%include "/programs/users/rzhou/library/zip.sas";
+%include "/programs/users/rzhou/library/unzip.sas";
 
 /* Library for input/output data sets*/
 filename issload "/mbsis_data2/b07/issload.&currmon." lrecl=75;
