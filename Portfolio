@@ -1,0 +1,721 @@
+proc datasets kill;
+/* Date Controls On Whole Macro*/
+%let currdate=201902; 	/* current date of data*/
+proc printto log="/integration/37_dashboarding/&currdate./logs/portfolio_snapshot_log_tableau_ALL_&sysdate..log" new; run;
+%let cutof = 23;		/* This is if I want to run more than one month data. Ex: 4 years = 47 (mos)*/
+%let currmon = dat;		/* should be dat unless not being run for current month, 'jan','feb', etc */
+%let cutoffdate = 201811; /* last file in the current unarchived folder, current - 3 */	
+
+%let prevout = 201901; /* location of most up-to-date rolling dataset. Should be last month the file was run (usually previous month) */
+
+/* Date Controls on TLI ROLL*/
+%let currmonth=feb;  	/* current month of data being run formatted: mmm */
+%let currmo=02;        	/* month of current month being run of tli data*/
+%let curryr=2019;     	/* year of current month being run of tli data*/
+%let prevmo=12;       	/* month of first month of tli data shouldn't change    - find out how often this is re-zipped*/
+%let prevyr=2006;     	/* year of first month of tli data shouldn't change */
+%let endzip=201501;     /* date of first month that is zipped */
+
+%include "/programs/users/jpark/library/calendar.sas";
+%include "/programs/users/jpark/library/zip.sas";
+%include "/programs/users/jpark/library/unzip.sas";
+
+/* Library for input/output data sets*/
+filename issload "/mbsis_data2/b07/issload.&currmon." lrecl=75;
+libname cloan "/mbsis_data2/arch/online/lp_&currdate.";
+libname output "/integration/37_dashboarding/&currdate/files/";
+libname prevout "/integration/37_dashboarding/&prevout./files/";
+libname MisInvld "/integration/37_dashboarding/&currdate./Missing_Invalid/";
+
+%macro dataprep;
+
+%macro quarterroll;
+
+%calendar(date=&currdate., n=&cutof.);
+
+%do i = 0 %to &cutof. %by 1; /*Cutoff will be the number of months back I am running for. "by #" = increments to take snapshots at 
+
+/* Location of the LoanPool Dataset*/
+libname loan "/mbsis_data2/arch/online/lp_&&date&i./";
+
+/*Pooltape locations */
+%if &i.= 0 %then %do;
+	filename pool "/mbsis_data2/b07/pooltape.&currmon." lrecl=261;
+%end;
+%else %if &&date&i.>= &cutoffdate. %then %do;
+	filename pool "/mbsis_data2/b07/pooltape.&&mmm&i.." lrecl=261;
+%end;
+%else %do;
+	filename pool "/integration/source/&&date&i../b07/pooltape.&&mmm&i.." lrecl=261;
+%end;
+
+/* 10a file locations */
+%if &i.=0 %then %do;
+	filename tena "/mbsis_data2/ipads/currpma.sep" lrecl=850;
+%end;
+%else %if &&date&i.>= &cutoffdate. %then %do;
+	filename tena "/mbsis_data2/ipads/currpma.&&mmm&i.." lrecl=850;
+%end;
+%else %do;
+	filename tena "/integration/source/&&date&i../final/currpma.&&mmm&i.." lrecl=850;
+%end;
+
+/* Loanpool */
+data loans&i.;
+	set loan.loanpool (keep=issuer ltype rpb ptype mtgerate pissueym firstym maturym forc caseno pool lastym periodym FIC);
+    If ptype in ("AF", "AQ","AR", "AS","AT","AX","BD","FB","FL","FS","FT","GA","GD","GP","GT","QL","JM","RL","SF","SN","SL","TL","XL");
+	if issuer < 9000;
+	if ltype in (1,5,6) then agency = "F";
+		else if ltype in (2,4) then agency = "V";
+		else if ltype in (3) then agency = "R";
+		else if ltype in (7) then agency = "P";
+		else agency = "E";
+
+	loancount=1;
+	date=&&date&i.;
+
+	if ptype in ("AF","AQ", "AR", "AS", "AT", "AX", "FB", "FL", "FT", "QL", "RL", "SL", "TL", "XL") 
+		then ARMFlag=1; 
+		else armflag=0;
+	if ptype in ("BD", "FS", "GA", "GD", "GP", "GT", "JM", "SF" "SN") then FIXEDflag=1; 
+		else FIXEDflag=0;
+/*	Add in MF pools down the road*/
+
+	ODATE = INPUT(PUT(FIRSTYM,Z6.),YYMMN6.);
+	MDATE = INPUT(PUT(MATURYM,Z6.),YYMMN6.);
+	TERM = INTCK('year',ODATE, MDATE);
+	
+	CDATE = INPUT(PUT(PERIODYM,Z6.),YYMMN6.);
+	FDATE = INPUT(PUT(FIRSTYM,Z6.),YYMMN6.);
+	LDATE = INPUT(PUT(LASTYM,Z6.),YYMMN6.);
+	
+	IF LASTYM = . AND FIRSTYM <= PERIODYM THEN LDATE = INTNX('MONTH', FDATE, -1);
+		ELSE IF LASTYM = . AND FIRSTYM > PERIODYM THEN LDATE = FDATE;
+	IF FIRSTYM > PERIODYM THEN DQTIME = 0;
+		ELSE DQTIME = INTCK('MONTH',LDATE, CDATE);
+
+	If upcase(forc) = 'Y' then forcflag = 1; 
+		else forcflag=0;
+
+	CDATE = INPUT(PUT(PERIODYM,Z6.),YYMMN6.);
+	IDATE = INPUT(PUT(PISSUEYM,Z6.),YYMMN6.);
+
+	loanage=intck('Month',IDATE,CDATE);	
+		
+run;
+ 
+/*Pooltape Read In*/
+
+DATA POOLS&i.;
+  INFILE pool;
+  INPUT @6    POOL        $6.
+        @12   GTYPE       $1.
+        @13   POOLTYPE    $2.
+        @15   POOLSTAT    1.
+        @18   PMTGERATE   5.3
+		@23	  csecrate	  5.3
+        @28   ISSUEMO     2.
+        @28   ISSUDAT     6.
+        @32   ISSUEYR     2.
+		@34   GFEE		  4.
+		@174  TXISSUER	  4.
+		@179  TXDATE 	  $4.   
+;
+    IF ISSUEYR<70 THEN ISSUEYR=ISSUEYR+2000;
+                   ELSE ISSUEYR=ISSUEYR+1900;	
+	Poolissuedate=(issueyr*100)+issuemo;
+
+	/* Transfer Date Logic */
+	TransferYR=substrn(txdate,3,2);
+	TransferMO=substrn(txdate,1,2);
+	    IF TransferYR<70 THEN TransferYR=TransferYR+2000;
+                   ELSE TransferYR=TransferYR+1900;
+		Pooltransferdate=(TransferYR*100)+TransferMO;
+
+/* Transfer Flag */
+	If txissuer > 0 then transferflag=1;
+	else transferflag=0;
+
+/* PIIT vs. Bulk Transfers*/
+	if Pooltransferdate ^= poolissuedate then BULKflag = 1;
+	else BULKflag=0;	
+run;
+
+/* Ten A Read In*/
+
+data tena&i.;
+infile tena;
+	input
+	@1		pool	$6.
+	@7		month	2.
+	@9		year	4.
+	@186	prpb	12.2
+	@256	dqint	10.2
+	@266	dqprin	12.2		
+	; 
+
+	activitymonth=compress(year||month);
+run;
+
+proc sort data=loans&i.; by pool; run;
+proc sort data=pools&i.; by pool; run;
+proc sort data=tena&i.; by pool; run;
+
+data execs&i.; 
+	merge loans&i. (in=a) pools&i. tena&i.;
+	by pool;
+		if a;
+    if First.Pool then Num_Pools=0;
+    Num_Pools+0;
+    if Last.pool then Num_Pools=1;
+	Num_Loans=1;
+	 array change _numeric_;
+		 do over change;
+		 if change=. then change=0;
+	 	end;
+run;
+
+proc datasets noprint;
+	delete loans&i. pools&i. tena&i.;
+run;
+
+%end;
+
+data execs;
+set %do i=0 %to &cutof. %by 1; execs&i. %end;;
+run;
+
+proc datasets noprint;
+delete %do i=0 %to &cutof. %by 1; execs&i. 
+	%end;;
+run;
+
+%mend;
+%quarterroll;
+
+
+/* TLI Macro To Create The Issuance Dataset */
+
+%macro tliroll;
+
+%let cutoff = %eval((&currmo.-&prevmo.)+((&curryr.-&prevyr.)*12)); 
+
+%calendar(date=&currdate.,n=&cutoff.);
+%do i=0 %to &cutoff.;
+
+%if &&date&i.>=201005 and &&date&i.>=&endzip. %then %do; 
+filename tli&i. "/mbsis_data2/chase/&&mmm&i..tli&&yy&i...dat" lrecl=352;
+
+/* Commented out variables below are used for Mark's Issuance Dataset */
+data tli&i.;
+	infile tli&i. missover;
+		input 
+		@2 		caseno		$15.
+/*		@19		issuerp		$4.*/ 
+		@23 	pool 		$6.
+/*		@29 	Pool_Type 	$2.*/
+		@81		omtgerate	5.3
+		@108 	opb 		12.2
+		@291 	zip			$5.
+/*		@300 	Agency 		$1.*/
+		@320 	LTV			5.2
+		@325	purp		1.
+		@328 	FICO		3.
+	;
+	originationdate=&&date&i.;
+run;
+%end;
+
+%else %if &&date&i.>=201005 and &&date&i.<&endzip. %then %do; 
+/* unzip file */
+%unzip(file=/mbsis_data2/chase/&&mmm&i..tli&&yy&i...dat,n=&i.);
+filename tli&i. "/mbsis_data2/chase/&&mmm&i..tli&&yy&i...dat" lrecl=352;
+
+/* Commented out variables below are used for Mark's Issuance Dataset */
+data tli&i.;
+	infile tli&i. missover;
+		input 
+		@2 		caseno		$15.
+/*		@19		issuerp		$4.*/ 
+		@23 	pool 		$6.
+/*		@29 	Pool_Type 	$2.*/
+		@81		omtgerate	5.3
+		@108 	opb 		12.2
+		@291 	zip			$5.
+/*		@300 	Agency 		$1.*/
+		@320 	LTV			5.2
+		@325	purp		1.
+		@328 	FICO		3.
+	;
+	originationdate=&&date&i.;
+run;
+%zip(file=/mbsis_data2/chase/&&mmm&i..tli&&yy&i...dat,n=&i.);
+%end;
+
+%else %do;
+/* unzip file */
+%unzip(file=/mbsis_data2/chase/&&mmm&i..tli&&yy&i...dat,n=&i.);
+filename tli&i. "/mbsis_data2/chase/&&mmm&i..tli&&yy&i...dat" lrecl=301;
+
+data tli&i.;
+	infile tli&i. missover;
+		input 
+		@2 		caseno		$15.
+		@23 	pool 		$6.
+		@81		omtgerate	6.3
+		@107 	opb 		10.2
+		@254 	zip			$5.
+	;
+
+	originationdate=&&date&i.;
+run;
+%zip(file=/mbsis_data2/chase/&&mmm&i..tli&&yy&i...dat,n=&i.);
+%end;
+%end;
+
+data tliroll;
+	set %do i=0 %to &cutoff.; tli&i.
+	%end; 
+	;
+run;
+
+proc datasets noprint;
+	delete %do i=0 %to &cutoff.; tli&i.
+	%end; 
+	;
+run;
+
+%mend;
+%tliroll;
+
+
+proc freq data=tliroll;
+	table purp;
+run;
+
+
+/*Data MisInvld.Ptlimpur;*/
+/*    Set tliroll;*/
+/*If purp=.;*/
+/*run;*/
+
+
+proc sort data=tliroll; by caseno pool; run;
+proc sort data=execs; by caseno pool; run;
+
+data finalexecs;
+	merge execs (in=a) tliroll (in=b);
+	by caseno pool;
+	if a;
+run;
+
+proc freq data=finalexecs;
+     table purp;
+run;
+
+Data MisInvld.Ptotmpur;
+    Set finalexecs;
+If purp=.;
+run;
+
+
+proc datasets noprint;
+	delete tliroll;
+run;
+
+proc datasets noprint;
+	delete execs;
+run;
+
+
+/***********************Reading in extra datasets and combining to main dataset******************/
+
+
+
+/* Use AEload to calculate depository and non-depository */
+data load;
+  infile issload;
+  INPUT @1    issuer     4.
+  		@32	  status 	$3.
+        @41   eligcode  $1.
+		@68	  code 		$2.
+;
+  LENGTH institution_type $14;
+
+  if issuer < 9000;
+
+if code in ('02','03','04','05') then institution_type='Depository';
+else if code in ('01','06') then institution_type='Non-Depository';
+if eligcode in ('1','2','3','4','5','6','7');
+if issuer in ('1638',
+'3355',
+'1403',
+'2572',
+'2253',
+'3886',
+'3657',
+'3860',
+'1864',
+'1447',
+'1405',
+'3853',
+'1543',
+'1594',
+'1801',
+'3645',
+'3540',
+'3231',
+'2907',
+'2936',
+'3663',
+'2208',
+'3239',
+'3667',
+'3941',
+'3216',
+'3918',
+'3907'
+
+) then institution_type='Depository'
+;
+keep issuer institution_type;
+run;
+
+proc sort data=finalexecs; by issuer; 
+proc sort data=output.nameroll1; by issuer; 
+proc sort data=output.accteroll1; by issuer; 
+proc sort data=output.pgroll1; by issuer; 
+proc sort data=load; by issuer; 
+
+
+/*proc sort data=pg.pgtable; by issuer; run;*/
+
+data portfolio_complete;
+	merge finalexecs (in=a) output.nameroll1 (in=b) output.accteroll1 (in=c) output.pgroll1 (in=d) load (in=e);
+	by issuer;
+	if a;
+run;
+
+proc freq data=portfolio_complete;
+table peer_group;
+run;
+
+
+Proc sort data=finalexecs; By periodym issuer;
+proc means sum noprint;
+output out = test (drop = _type_ _freq_)
+sum = rpb Num_Loans Num_Pools;
+var rpb Num_Loans Num_Pools;
+by periodym issuer;
+run;
+
+
+/********************Setting buckets and aliases for final dataset*************************/
+data data MisInvld.PAGENCY MisInvld.PPURPOSE
+	 MisInvld.PFICO MisInvld.PLTV
+	 MisInvld.PMtgerate MisInvld.Ploanage MisInvld.Ppgsize
+	 MisInvld.Pinsttype MisInvld.PBULKPIIT
+	 MisInvld.PFIXEDARM MisInvld.PAE
+	 MisInvld.Pmargin
+     finalexecs4(rename=( issuer=issuerp
+				    	Newissuer=issuer
+										)) ;
+	length dqs $2. age $2. purpose $2.;
+	set portfolio_complete;
+
+/*Filters For LTV and FICO Scores*/
+		if ltv <= 115 and ltv > 75 then goodltvflag=1;
+			else goodltvflag=0;
+		if fico <= 850 and fico >= 300 then goodficoflag=1;
+			else goodficoflag=0;
+
+/*	DQ TIME*/
+		if dqtime = 1 then dqt = 1;
+		if dqtime = 2 then dqt = 2;
+		if dqtime >=3 then dqt = 3;
+		if dqtime <=0 then dqt = 0;
+
+/*	Weighted Mtge Rate*/
+	wtdmtgerate=mtgerate*rpb;
+
+/*	Weighted Servicing Margin */
+	margin=(mtgerate-csecrate)-(gfee/100); 
+	wtdmargin=rpb*margin;
+
+/*	Weighted averge age */
+	wtdage=loanage*rpb;
+
+/*	Weighted Average LTV */
+	if goodltvflag=1 then wtdltv = ltv * rpb; 
+	else wtdltv = 0;
+	if goodltvflag=1 then ltvRPB = RPB; 
+	else ltvRPB = 0;
+
+/*	Weighted Average FICO */
+	if goodficoflag=1 then wtdFICO = FICO * rpb; 
+	else wtdFICO = 0;
+ 	if goodFICOflag=1 then FICORPB = RPB; 
+	else FICORPB = 0;
+
+
+/*	DQP Ratio */
+	if dqtime > 0 then dqpi = fic * dqtime;
+	else dqpi = 0;
+
+/* Agency */
+	if 		agency="F" then agency=1; /* FHA */
+	else if	agency="V" then agency=2; /* VA */
+	else if agency="R" then agency=3; /* RD */
+	else if agency="P" then agency=4; /* PIH */
+	else agency = 5; /* Other/Missing */
+
+	if AGENCY = 5 then output MisInvld.PAGENCY;
+
+/*	Purp Codes */
+	if purp=1 then purpose= 6; /* Purchase */
+		else if purp=2 then purpose= 7; /* Refi */
+		else if purp=3 then purpose= 8; /* HAMP */
+		else if purp=4 then purpose= 9; /* Non-HAMP */
+		else purpose= 10; /* Other/Missing */
+
+		if PURPOSE= 10 then output MisInvld.PPURPOSE;
+
+/*	Credit Score Buckets */
+/*	if goodficoflag = 0 then ficobuc = 13;*/
+/*		else if FICO >= 781 then ficobuc = 14;*/
+/*		else if FICO > 751 then ficobuc= 15;*/
+		if FICO > 850 then focobuc = 13;
+		else if FICO > 720 then ficobuc = 16;
+/*		else if FICO > 701 then ficobuc = 17;*/
+		else if FICO > 660 then ficobuc = 18;
+/*		else if FICO > 651 then ficobuc = 19;*/
+		else if FICO > 620 then ficobuc = 20;
+/*		else if FICO > 601 then ficobuc = 21;*/
+		else if FICO > 580 then ficobuc = 22;
+/*		else if FICO > 551 then ficobuc = 23;*/
+		else if FICO > 500 then ficobuc = 24;
+		else if FICO > 300 then ficobuc = 25;
+		else if FICO in (100,200) then ficobuc = 26;
+		else ficobuc= 13;
+
+		if ficobuc= 13 then output MisInvld.PFICO;
+
+/*	LTV Buckets */
+	if goodltvflag = 0 then ltvbuc = 29;
+/*		else if ltv > 115 then ltvbuc = 30;*/
+/*		else if ltv > 110 then ltvbuc = 31;*/
+/*		 if ltv > 115 then ltvbuc = 30;*/
+		else if ltv > 105 then ltvbuc = 32;
+/*		else if ltv > 100 then ltvbuc = 33;*/
+		else if ltv > 95  then ltvbuc = 34;
+/*		else if ltv > 90  then ltvbuc = 35;*/
+		else if ltv > 85  then ltvbuc = 36;
+/*		else if ltv > 80  then ltvbuc = 37;*/
+		else if ltv => 75  then ltvbuc = 38;
+
+		else ltvbuc = 29;
+
+		if ltvbuc = 29 then output MisInvld.PLTV;
+
+/* Mortgage Rates */
+	if 			mtgerate <  2.5 then ratebuc = 42;
+		else if mtgerate < 3.0 then ratebuc = 43;
+		else if mtgerate < 3.5 then ratebuc = 44;
+		else if mtgerate < 4.0 then ratebuc = 45;
+		else if mtgerate < 4.5 then ratebuc = 46;
+		else if mtgerate < 5.0 then ratebuc = 47;
+		else if mtgerate >= 5.0 then ratebuc = 48;
+		else ratebuc = 49;
+
+		if ratebuc = 49 then output MisInvld.PMtgerate;
+
+/*	Age of the Loans*/
+	if loanage>=0 and loanage <=12 then age= 51;
+		else if loanage>=13 and loanage <=35 then age= 52;
+		else if loanage>=36 and loanage <=59 then age= 53;
+		else if loanage>=60 then age = 54;
+		else output MisInvld.Ploanage;
+
+/* Peer Group*/
+	if		    peer_group =	"Very Small"	then pg_size = 55;
+		else if peer_group = 	"Small"			then pg_size = 56;
+		else if	peer_group =	"Medium"		then pg_size = 57;
+		else if peer_group = 	"Large"			then pg_size = 58;
+		else if peer_group = 	"Mega"			then pg_size = 59;
+		else pg_size = "NA";
+
+	if pg_size = "NA" then output MisInvld.Ppgsize;
+		
+/* Institution Type */
+
+	if			institution_type = "Depository" 	then i_type = 62;
+		else if institution_type = "Non-Depository" then i_type = 63;
+		else i_type = 64;
+
+	if i_type = 64 then output MisInvld.Pinsttype;
+
+/*	Delinquencies and Foreclosures*/
+	if forcflag=1 then dqs=66; /* Foreclosure */
+		else if dqtime >=3 then dqs=67; /* DQ3+ - Foreclosure (90+days) */
+		else if dqtime  =2 then dqs=68; /* DQ2 (60 days) */
+		else if dqtime  =1 then dqs=69; /* DQ1 (30 days) */
+		else if dqtime <=0 then dqs=70; /* Current */
+
+/*	Transfers and BULK VS PIIT*/
+	if transferflag=0 then BULKPIIT= 71; /* Not Transferred */
+		else if transferflag=1 and BULKflag=1 then BULKPIIT= 72; /* Bulk Transfer */
+		else if transferflag=1 and BULKflag=0 then BULKPIIT= 73; /* PIIT Transfer */
+		else BULKPIIT= 74; /* Other */
+
+	if BULKPIIT= 74 then output MisInvld.PBULKPIIT;
+
+/*	Fixed vs. ARM */
+	if ptype in ("AF","AQ", "AR", "AS", "AT", "AX", "FB", "FL", "FT", "QL", "RL", "SL", "TL", "XL") 
+				then ProductType= 75; /* ARM */
+		else if ptype in ("BD", "FS", "GA", "GD", "GP", "GT", "JM", "SF" "SN")
+			and (term > 25 and term < 35) then ProductType= 76; /* Fixed 30-year */
+		else if ptype in ("BD", "FS", "GA", "GD", "GP", "GT", "JM", "SF" "SN")
+			and (term < 20 and term > 10) then ProductType= 77; /* Fixed 15-year */
+		else if ptype in ("BD", "FS", "GA", "GD", "GP", "GT", "JM", "SF" "SN")
+										  then ProductType= 78; /* Fixed Other */
+		else ProductType= 79; /* Other */
+
+ 	if ProductType= 79 then output MisInvld.PFIXEDARM;
+
+/* Servicing Fee */
+	if 			margin <=  .12 		 then marginbuc = 105;
+		else if .12 <  margin <= .25 then marginbuc = 106;
+		else if .25 <  margin <= .43 then marginbuc = 107;
+		else if .43 <  margin <= .50 then marginbuc = 108;
+		else if margin > .50 		 then marginbuc = 109;
+		else marginbuc = 110;
+
+	if marginbuc = 110 then output MisInvld.Pmargin;
+
+	level="issuer";
+
+    output finalexecs4;
+
+run;
+
+
+DATA finalexecsAgg;
+	SET finalexecs4;
+	level="Agg";
+	drop issuerp issuer;
+RUN;
+
+/*Data finalexecs5;*/
+/*	set finalexecs4;*/
+/*	drop issuer;*/
+/*	rename NewIssuer=issuer;*/
+/*run;*/
+
+
+
+%mend;
+%dataprep;
+
+/* This is either the first of many proc summary statements 
+or one massive proc summary that includes every single flag 
+we could possibly think of to create the tableau dataset*/
+
+
+Proc sort data=finalexecs4; By periodym issuerp issuer name i_type pg_size /*txissuer*/ acctexec agency ProductType BULKPIIT purpose dqs ficobuc age ltvbuc ratebuc marginbuc level;
+proc means sum noprint;
+output out = finalexecs5 (drop = _type_ _freq_)
+sum = rpb wtdmtgerate wtdage wtdmargin wtdltv ltvRPB wtdFICO FICORPB dqpi fic Num_Loans Num_Pools;
+var rpb wtdmtgerate wtdage wtdmargin wtdltv ltvRPB wtdFICO FICORPB dqpi fic Num_Loans Num_Pools;
+by periodym issuerp issuer name i_type pg_size /*txissuer*/ acctexec agency ProductType BULKPIIT purpose dqs ficobuc age ltvbuc ratebuc marginbuc level;
+run;
+
+
+Proc sort data=finalexecsAgg; By periodym pg_size i_type /*txissuer*/ acctexec agency ProductType BULKPIIT purpose dqs ficobuc age ltvbuc ratebuc marginbuc level;
+proc means sum noprint;
+output out = finalexecsAgg2 (drop = _type_ _freq_)
+sum = rpb wtdmtgerate wtdage wtdmargin wtdltv ltvRPB wtdFICO FICORPB dqpi fic Num_Loans Num_Pools;
+var rpb wtdmtgerate wtdage wtdmargin wtdltv ltvRPB wtdFICO FICORPB dqpi fic Num_Loans Num_Pools;
+by periodym pg_size i_type /*txissuer*/ acctexec agency ProductType BULKPIIT purpose dqs ficobuc age ltvbuc ratebuc marginbuc level;
+run;
+
+Proc sort data=finalexecsAgg; By periodym pg_size /*txissuer*/ acctexec agency ProductType BULKPIIT purpose dqs ficobuc age ltvbuc ratebuc marginbuc level;
+proc means sum noprint;
+output out = finalexecsAggALL (drop = _type_ _freq_)
+sum = rpb wtdmtgerate wtdage wtdmargin wtdltv ltvRPB wtdFICO FICORPB dqpi fic Num_Loans Num_Pools;
+var rpb wtdmtgerate wtdage wtdmargin wtdltv ltvRPB wtdFICO FICORPB dqpi fic Num_Loans Num_Pools;
+by periodym pg_size /*txissuer*/ acctexec agency ProductType BULKPIIT purpose dqs ficobuc age ltvbuc ratebuc marginbuc level;
+run;
+
+
+Data finalexecsAgg2;
+	RETAIN periodym issuer i_type pg_size /*txissuer*/ acctexec agency ProductType BULKPIIT purpose dqs ficobuc age ltvbuc ratebuc marginbuc level rpb wtdmtgerate wtdage wtdmargin wtdltv ltvRPB wtdFICO FICORPB dqpi fic;
+	Set finalexecsAgg2;
+	issuer="Agg";
+	/*pg_size=11;*/
+Run;
+
+Data finalexecsAggAll;
+	RETAIN periodym issuer i_type pg_size /*txissuer*/ acctexec agency ProductType BULKPIIT purpose dqs ficobuc age ltvbuc ratebuc marginbuc level rpb wtdmtgerate wtdage wtdmargin wtdltv ltvRPB wtdFICO FICORPB dqpi fic;
+	Set finalexecsAggAll;
+	issuer="Agg";
+	i_type=.;
+Run;
+
+proc freq data=finalexecs5;
+table issuer;
+run;
+
+
+proc freq data=finalexecsAgg2;
+table issuer;
+run;
+
+proc freq data=finalexecsAggALL;
+table issuer;
+run;
+
+
+Data finalfile2;
+	set finalexecs5 finalexecsAgg2 finalexecsAggAll;
+	if issuer in("Agg") and i_type = 62 then issuer = "Depositories";
+	else if issuer in("Agg") and i_type = 63 then issuer = "Non-Depositories";
+	else if issuer in("Agg") and i_type = .  then issuer = "All Ginnie Mae";
+
+	FICOcVar = wtdfico / rpb;
+	LTVcVar  = wtdltv  / rpb;
+	RATEcVar = wtdmtgerate / rpb;
+	AGEcVar  = wtdage / rpb;
+	MARGINcVar = wtdmargin / rpb;
+run;
+
+proc freq data=finalfile2;
+table issuer;
+run;
+
+
+data output.portdash_ALL;
+	set	    finalfile2(rename=( fic=FIC
+							    rpb=RPB
+							    wtdfico=wtdFICO
+								            	)) ;
+	rename num_loans=_FREQ_;
+/*	 prevout.portdash_ALL;*/
+run;
+
+
+/*This code is QC to make sure each month has new data*/
+proc freq data=output.portdash_ALL;
+tables periodym;
+run;
+
+
+/*libname output "/integration/37_dashboarding/&currdate/files/";*/
+
+proc export data=output.portdash_ALL outfile="/integration/37_dashboarding/&currdate./reports/port_dashboard_tableau_ALL_&sysdate..txt" dbms = tab replace; putnames=yes; run; 
+
+/*proc printto log=log print=print; run;*/
+
+/*proc freq data=main;*/
+/*	tables dqs / out=freqcount;*/
+/*run;*/
+
