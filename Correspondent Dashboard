@@ -1,0 +1,694 @@
+*********************************************************************************************************************;
+*  QUARTERLY LENDER DATA  (make data edits below)                                                                   *;
+*********************************************************************************************************************;
+%include "/unzip.sas";
+%include "/zip.sas";
+%include "/calendar.sas";
+
+/*Update these for TLIROLLUP (make sure the dates align with GPADs data*/
+%let crym = 201812;  /*current date of data*/
+%let crmo=12;        /*month of final month of data*/
+%let crmoth=dec;        /*month of final month of data*/
+%let prevmo=11;       /*month of first month of data*/
+%let cryr=2018;     /* year of current month of data*/
+%let prevyr=2016;     /*year of first month of data*/
+libname common '/integration/01_gpads/201812/files';   /*  Update 3 months to reflect location of quarterly data  */
+/*libname wtever '/integration/CorrespondentLender/files';*/
+filename  dd1 '/mbsis_data2/b07/issname.dat';
+
+*********************************************************************************************************************;
+*  Read in the lender ID file (FHA, VA, RD)																            *;
+*********************************************************************************************************************;
+
+data cross;
+	set common.finalx;
+/*	set wtever.finalx;*/
+	interid=_N_;
+run;
+
+*********************************************************************************************************************;
+*  Created updated FMATCH dataset																                    *;
+*********************************************************************************************************************;
+%MACRO FMATCH;
+
+data one;
+	set common.fmatch (drop=issuer);
+	agency='F';
+	lender=flender;
+run;
+
+%DO I = 1 %TO 9;
+
+data x&I. (keep=lender issuer interid);
+	set cross (where=(fhaid&I. ne ' '));
+	lender=fhaid&I.;
+run;
+%END;
+
+data two;
+	set x1 x2 x3 x4 x5 x6 x7 x8 x9;
+run;
+
+proc datasets;
+	delete x1 x2 x3 x4 x5 x6 x7 x8 x9;
+run;
+
+proc sort data=one;
+	by lender;
+run;
+
+proc sort data=two;
+	by lender;
+run;
+
+data fmatcha (drop=purpose);
+	merge one (in=a) two;
+	by lender;
+	if a;
+	keep CASENO	POOL issuer	LOANNO	LTYPE	AGENCY	STATE	FIRSTYM	FIRSTYR	MATURYM	MATURYR	FORC PERIODYM PERIODYR PERIODMO	
+	LASTYM	LASTYR	LASTMO	MTGERATE	FIC	RPB	PISSUER	PISSUE	PTYPE PSTAT	PMRATE	PSRATE	PISSUEYM	PISSUEYR	
+	PISSUEMO PFHACNT PVACNT	POPB PMATURYM	PMATURYR PMATURMO CITY	LENDER	LTV		INSDATE	MTGETYPE	LOANKEY	owflag loans;
+	if lender not in ("00000") then owflag=1; else owflag=0;
+	loans=1;
+run;
+
+
+proc datasets;
+	delete one two;
+run;
+
+%MEND FMATCH;
+%FMATCH;
+
+
+*********************************************************************************************************************;
+*  Create updated VMATCH dataset																                    *;
+*********************************************************************************************************************;
+%MACRO VMATCH;
+
+data one;
+	set common.vmatch (drop=issuer);
+	agency='V';
+	lender=vlender;
+run;
+
+%DO I = 1 %TO 5;
+
+data x&I. (keep=lender issuer interid);
+	set cross (where=(vaid&I. ne ' '));
+	lender=vaid&I.;
+run;
+%END;
+
+data two;
+	set x1 x2 x3 x4 x5;
+run;
+
+proc datasets;
+	delete x1 x2 x3 x4 x5;
+run;
+
+proc sort data=one;
+	by lender;
+run;
+
+proc sort data=two;
+	by lender;
+run;
+
+data vmatcha (drop=purpose);
+	merge one (in=a) two;
+	by lender;
+	if a;
+	keep CASENO	POOL issuer	LOANNO	LTYPE	AGENCY	STATE	FIRSTYM	FIRSTYR	MATURYM	MATURYR	FORC	PERIODYM	PERIODYR	PERIODMO	
+	LASTYM	LASTYR	LASTMO	MTGERATE	FIC	RPB	PISSUER	PISSUE	PTYPE	PSTAT	PMRATE	PSRATE	PISSUEYM	PISSUEYR	
+	PISSUEMO PFHACNT	PVACNT	POPB	PMATURYM	PMATURYR	PMATURMO CITY LENDER	LTV		INSDATE	MTGETYPE	LOANKEY	owflag loans;
+	if lender not in ("000000") then owflag=1; else owflag=0;
+	loans=1; 
+run;
+
+proc datasets;
+	delete one two;
+run;
+
+%MEND VMATCH;
+%VMATCH;
+
+
+*********************************************************************************************************************;
+*  Create updated RMATCH dataset                   																    *;
+*********************************************************************************************************************;
+%MACRO RMATCH;
+
+data one;
+	set common.rmatch (drop=issuer);
+	agency='R';
+	lender=rlender;
+run;
+
+%DO I = 1 %TO 3;
+
+data x&I. (keep=lender issuer interid);
+	set cross (where=(rhsid&I. ne ' '));
+	lender=rhsid&I.;
+run;
+%END;
+
+data two;
+	set x1 x2 x3;
+run;
+
+proc datasets;
+	delete x1 x2 x3;
+run;
+
+proc sort data=one;
+	by lender;
+run;
+
+proc sort data=two;
+	by lender;
+run;
+
+data rmatcha (drop=purpose);
+	merge one (in=a) two;
+	by lender;
+	if a;
+	keep CASENO	POOL issuer	LOANNO	LTYPE	AGENCY	STATE	FIRSTYM	FIRSTYR	MATURYM	MATURYR	FORC	PERIODYM	PERIODYR	PERIODMO	
+	LASTYM	LASTYR	LASTMO	FIC	RPB	PISSUER	PISSUE	PTYPE	PSTAT	PMRATE	PSRATE	PISSUEYM	PISSUEYR	
+	PISSUEMO PFHACNT PVACNT	POPB PMATURYM	PMATURYR	PMATURMO	CITY	LENDER	LTV	INSDATE	MTGETYPE	LOANKEY	owflag loans;
+	if lender not in ("0000000000") then owflag=1; else owflag=0;
+	loans=1;
+run;
+
+proc datasets;
+	delete one two;
+run;
+
+%MEND RMATCH;
+%RMATCH;
+
+
+Data allmatch;
+  Set fmatcha vmatcha rmatcha;
+Run;
+
+
+proc freq data=allmatch;
+ tables PISSUEYM;
+ run;
+
+  proc freq data=fmatcha;
+ tables owflag*pissuer/nocol norow;
+ run;
+
+  proc freq data=vmatcha;
+ tables owflag*pissuer/nocol norow;
+ run;
+
+  proc freq data=rmatcha;
+ tables owflag*pissuer/nocol norow;
+ run;
+
+
+ proc freq data=allmatch;
+ tables owflag*pissuer/nocol norow;
+ run;
+
+
+Data allmatch1 (drop=issuer);
+  Set allmatch;
+	if issuer=pissuer then origtype='I'; else origtype='C';
+/*   if fic < (0.002*rpb) or fic > 5000 then fic = 0.01*rpb;*/
+   if (mtgerate <= 0 or mtgerate = .) and pmrate > 0 then mtgerate=pmrate;
+   mrateupb=mtgerate*rpb;
+
+/* Mortgage Rates */
+	if 			mtgerate <  2.5 then ratebuc = "<2.5%       ";
+		else if mtgerate < 3.0 then ratebuc = ">=2.5%     ";
+		else if mtgerate < 3.5 then ratebuc = ">=3.0%     ";
+		else if mtgerate < 4.0 then ratebuc = ">=3.5%    ";
+		else if mtgerate < 4.5 then ratebuc = ">=4.0%    ";
+		else if mtgerate < 5.0 then ratebuc = ">=4.5%     ";
+		else if mtgerate >= 5.0 then ratebuc = ">=5.0%     ";
+		else ratebuc = "Other/Missing";
+
+   if ltv <= 125 and ltv >= 10 then goodltvflag=1; /* Josh Cook said to use this range 10-125 for LTV Disclosure*/
+   else goodltvflag=0;
+
+   if goodltvflag=1 then wltvupb = ltv * rpb; 
+   else wltvupb = 0;
+
+   if goodltvflag=1 then goodltvupb = rpb;
+   else goodltvupb = 0;
+
+/*	LTV Buckets */
+/*	if goodltvflag = 0 then ltvbuc = 29;*/
+/*		else if ltv > 115 then ltvbuc = 30;*/
+/*		else if ltv > 110 then ltvbuc = 31;*/
+		 if ltv > 115 then ltvbuc = ">115%     ";
+		else if ltv > 105 then ltvbuc = "106-115%";
+/*		else if ltv > 100 then ltvbuc = 33;*/
+		else if ltv > 95  then ltvbuc = "96-105%";
+/*		else if ltv > 90  then ltvbuc = 35;*/
+		else if ltv > 85  then ltvbuc = "86-95%";
+/*		else if ltv > 80  then ltvbuc = 37;*/
+		else if ltv => 75  then ltvbuc = "76-85%";
+		else ltvbuc = "0-75%";
+
+
+   if lastym = . and firstym > &crym. then dqtm = 0;
+        else if lastym = . and firstym <= &crym. then dqtm = ((&cryr. - firstyr)*12) + (&crmo. - firstmo) + 1;
+        else if lastym <= &crym. and lastym ne .  then dqtm = ((&cryr. - lastyr)*12) + (&crmo. - lastmo);
+        else dqtm = 0;
+
+   if dqtm=1 then dq1=1; else dq1=0;
+   if dqtm=2 then dq2=1; else dq2=0;
+   if dqtm>=2 then dq2p=1; else dq2p=0;
+   if dqtm>=3 then dq3p=1; else dq3p=0;
+   
+	if ptype in ('AF','AQ','AR','AS','AT','AX','FB','FL','FT','QL','RL','SL','TL','XL') then prodtype='ARM  '; 
+	else                                                                                     prodtype='Fixed';
+
+run;
+
+*********************************************************************************************************************;
+*  TLIROLLUP to bring in Purpose Code and FICO                   													*;
+*********************************************************************************************************************;
+
+%macro tliroll;
+
+%let cutoff = %eval((&crmo.-&prevmo.)+((&cryr.-&prevyr.)*12)); 
+
+%calendar(date=&crym.,n=&cutoff.);
+%do i=0 %to &cutoff.;
+
+%if &&date&i.>=201005 %then %do; 
+%unzip (file=/mbsis_data2/chase/&&mmm&i..tli&&yy&i...dat, n=&i.);
+filename tli&i. "/mbsis_data2/chase/&&mmm&i..tli&&yy&i...dat" lrecl=352;
+
+data tli&i.;
+infile tli&i. missover;
+input 
+@2 		caseno		$15.
+@130 	loankey		$9.
+@325	Purpose		1.
+@328 	FICO		3.
+;
+run;
+%end;
+
+%else %do;
+%unzip (file=/mbsis_data2/chase/&&mmm&i..tli&&yy&i...dat, n=&i.);
+filename tli&i. "/mbsis_data2/chase/&&mmm&i..tli&&yy&i...dat" lrecl=301;
+
+data tli&i.;
+infile tli&i. missover;
+input 
+@2 		caseno		$15.
+@130 	loankey		$9.
+@325	Purpose		1.
+@328 	FICO		3.
+;
+run;
+%end;
+%end;
+
+%if &i.<=&cutoff. %then %do;
+%zip (file=/mbsis_data2/chase/&&mmm&i..tli&&yy&i...dat, n=&i.);
+%end;
+
+data tliroll;
+set %do i=0 %to &cutoff.; tli&i.
+%end; 
+;
+run;
+
+%macro Getthefunkoutta;
+
+%do i=0 %to &cutoff.;
+proc datasets nolist nodetails;
+	delete tli&i.;
+run;
+%end;
+
+%mend;
+%Getthefunkoutta;
+
+%mend;
+%tliroll;
+
+
+proc freq data=tliroll;
+    tables purpose;
+run;
+
+
+*********************************************************************************************************************;
+*  Merge the TLIROLLUP with the agency match file and add FICO cal to it											                    *;
+*********************************************************************************************************************;
+
+proc sort data= allmatch1;
+by loankey;
+run;
+
+proc sort data= tliroll;
+by loankey;
+run;
+
+
+data almatch2;
+merge allmatch1 (in=a) tliroll (in=b);
+by loankey;
+if a;
+run;
+
+data almatch3;
+set almatch2;
+   if fico <= 850 and fico >= 350 then goodficoflag=1;
+   else goodficoflag=0;
+   if goodficoflag=1 then wficoupb = fico * rpb; 
+   else wficoupb = 0;
+   if goodficoflag = 1 then goodficoupb = rpb;
+   else goodficoupb = 0;
+
+   if pissuer<9000;
+
+/*	Credit Score Buckets */
+/*	if goodficoflag = 0 then ficobuc = "Missing/Invalid";*/
+			 if FICO > 850 then ficobuc = "Missing/Invalid";
+/*		else if FICO > 751 then ficobuc= 15;*/
+		else if FICO > 720 then ficobuc= ">=720";
+/*		else if FICO > 701 then ficobuc = 17;*/
+		else if FICO > 660 then ficobuc = "660-719";
+/*		else if FICO > 651 then ficobuc = 19;*/
+		else if FICO > 620 then ficobuc = "620-659";
+/*		else if FICO > 601 then ficobuc = 21;*/
+		else if FICO > 580 then ficobuc = "580-619";
+/*		else if FICO > 551 then ficobuc = 23;*/
+		else if FICO > 500 then ficobuc = "500-579";
+		else if FICO > 300 then ficobuc = "300-499";
+	    else if FICO in (100,200) then ficobuc = "Not Required";
+		else ficobuc= "Missing/Invalid";
+
+proc format;
+	value Purpose_Code
+		1 = 'Purchase'
+		2 = 'Refinance'
+		3 = 'HAMP'
+		4 = 'Non-HAMP';
+run;
+
+proc freq data=almatch3;
+tables purpose;
+run;
+
+*********************************************************************************************************************;
+*  Summarize almatch by pissuer, lender, agency, firstym, purpose, origtype, prodtype                               *;                             
+*********************************************************************************************************************;
+
+
+
+Proc sort data=almatch3; By pissuer lender agency firstym PISSUEYM purpose origtype prodtype ratebuc ltvbuc ficobuc;
+proc means sum noprint;
+output out = almatcha (DROP = _TYPE_ _FREQ_)
+sum = loans rpb dq1 dq2 dq2p dq3p mrateupb wltvupb goodltvupb wficoupb goodficoupb owflag;
+  var loans rpb dq1 dq2 dq2p dq3p mrateupb wltvupb goodltvupb wficoupb goodficoupb owflag;
+by pissuer lender agency firstym PISSUEYM purpose origtype prodtype ratebuc ltvbuc ficobuc;
+format purpose Purpose_Code.;
+run;
+
+
+*********************************************************************************************************************;
+*  Set fmatch, vmatch and rmatch together to create one Matched dataset. Also get rid of blank values               *;                      
+*********************************************************************************************************************;
+
+
+data final; set almatcha;
+   if loans= . then loans=0;
+   if rpb= . then rpb=0;
+   if dq1= . then dq1=0;
+   if dq2= . then dq2=0;
+   if dq2p= . then dq2p=0;
+   if dq3p= . then dq3p=0;
+   if mrateupb= . then mrateupb=0;
+   if wltvupb = . then wltvupb=0;
+   if wficoupb= . then wficoupb=0;
+   if goodltvupb = . then goodltvupb=0;
+   if goodficoupb= . then goodficoupb=0;
+run;
+
+
+*********************************************************************************************************************;
+*  Bring in the Lender Cross Files and Clean the Names                                                              *;
+*********************************************************************************************************************;
+
+Data BringinData1;
+Infile "/integration/01_gpads/&crym./files/fhacross.txt" dlm='~' dsd truncover;
+input Lender:$10. Drop Name:$40.
+;
+Run; 
+
+Data BringinData2;
+Infile "/integration/01_gpads/&crym./files/vacross.txt" dlm='~' dsd truncover;
+input Lender:$10. Drop Name:$40.
+;
+Run;
+
+Data BringinData3;
+Infile "/integration/01_gpads/&crym./files/rhscross.txt" dlm='~' dsd truncover;
+input Lender:$10. Drop Name:$40.
+;
+Run;
+
+Data AllLenderNames;
+set BringinData1 (drop= Drop) BringinData2 (drop= Drop) BringinData3 (drop=Drop);
+if Lender = '0' then delete;
+run;
+
+%macro clean_lendernames;
+
+Data AllLenderNames;
+set AllLenderNames;
+
+/* Next Step: apply the rules to clean the data in a general form, it's important to 
+use the tranwrd function on longer words first as removing smaller business words like "Co" first
+will impact other filler words such as incorporation */
+	
+		name = tranwrd(name, ".", "");
+		name = tranwrd(name, ",", "");
+		name = tranwrd(name, "-", "");
+		name = tranwrd(name, " AND ", ' & ');
+		name = tranwrd(name, " N A ", " NA ");
+		name = tranwrd(name, " BA ", " BANK ");
+		name = tranwrd(name, "BANK & TRU ", 'BANK & TRUST ');
+		name = tranwrd(name, "BANK & TR ", 'BANK & TRUST ');	
+		name = tranwrd(name, " CORPORATION ", " CORP ");
+		name = tranwrd(name, " CORPORATIO ", " CORP ");
+		name = tranwrd(name, " CORPORATI ", " CORP ");
+		name = tranwrd(name, " CORPORAT ", " CORP ");
+		name = tranwrd(name, " CORPORA ", " CORP ");
+		name = tranwrd(name, " CORPORO ", " CORP ");
+		name = tranwrd(name, " CORPOR ", " CORP ");
+		name = tranwrd(name, " COR ", " CORP ");
+		name = tranwrd(name, " INCORPORATED ", " INC ");
+		name = tranwrd(name, " MTG ", " MORTGAGE ");
+		name = tranwrd(name, " NATIONAL ASSOCIATION ", " NA ");
+		name = tranwrd(name, " NATIONAL ASSOCIATIO ", " NA ");
+		name = tranwrd(name, " NATIONAL ASSOCIATI ", " NA ");
+		name = tranwrd(name, " NATIONAL ASSOCIAT ", " NA ");
+		name = tranwrd(name, " NATIONAL ASSOCIA ", " NA ");
+		name = tranwrd(name, "PUERTO RICO", "PR");
+		name = tranwrd(name, "PENNSYLVANIA", "PA");
+		name = tranwrd(name, "WASHINGTO ", "WASHINGTON");		
+		name = tranwrd(name, " COMPANY ", " CO ");
+		name = tranwrd(name, " COMP ", " CO ");
+		name = tranwrd(name, " COM ", " CO ");
+		name = tranwrd(name, " L L C ", " LLC ");
+		name = tranwrd(name, " LL ", " LLC");
+		name = tranwrd(name, " F S B ", " FSB");
+		name = tranwrd(name, " F S ", " FSB");
+		name = tranwrd(name, " S B ", " SB ");
+		name = tranwrd(name, " SERVI ", " SERVICES ");
+		name = tranwrd(name, " SERV ", " SERVICES ");
+		name = tranwrd(name, " SVCS ", " SERVICES ");
+		name = tranwrd(name, " UNIO ", " UNION ");
+		name = tranwrd(name, " UNI ", " UNION ");
+		name = tranwrd(name, " L ", "");
+		name = tranwrd(name, " P ", "");
+		name = tranwrd(name, " U ", "");
+		name = tranwrd(name, " N ", "");
+		name = tranwrd(name, " F ", "");
+		name = tranwrd(name, " C ", "");
+		name = tranwrd(name, " I ", "");
+		name = tranwrd(name, " A ", "");
+
+/* In case some of these edits mess up formatting, an easy way to remove extra spaces is by adding the following
+		line to the end of the tranwrd statements. */
+		name = tranwrd(name, "  ", "");
+
+run;
+%mend; 
+%clean_lendernames;
+
+data AllLenderNames1;
+set AllLenderNames;
+run;
+%let maxscore=11; 
+
+/*COMPGED*/
+/*Computes the Levenshtein Edit Distance between two strings*/
+/*Scoring algorithm for (Replacement, deletion, or insertion) of characters within the string*/
+
+data comparenames;    
+set AllLenderNames1 end=eof1 nobs=nobs1;  
+do i = 1 to nobs1;     
+	set AllLenderNames(rename=(Name=Name1)) point=i;     
+	gedscore=compged(Name,Name1,&maxscore,'i' );  
+	if _n_ < i then do;      
+		if gedscore < &maxscore and gedscore ne 0 then output comparenames; 
+	end;   
+end;   
+keep Name Name1 gedscore; 
+run;
+
+proc sort data=AllLenderNames;
+by Name;
+run;
+
+proc sort data=comparenames nodupkey;
+by Name;
+run;
+
+data newlendernames;
+	Keep Lender Name Name1;
+	merge AllLenderNames(in=a) comparenames (in=b);
+	by Name;
+
+	if a;
+run;
+
+Data fixthoselendernames;
+set newlendernames;
+if Name1 ne ' ' then do;
+    NewName=Name1;
+end;
+if Name1 = ' ' then do;
+	NewName=Name;
+end;
+run;
+
+data AllLenderNames;
+rename NewName=Name;
+set fixthoselendernames (drop= Name Name1);
+run;
+
+*********************************************************************************************************************;
+*  Merge the Updated Lender Names with the Lender Data                                                              *;
+*********************************************************************************************************************;
+
+proc sort data= AllLenderNames;
+by Lender;
+Run;
+
+proc sort data= Final;
+by Lender;
+Run;
+
+Data PutItAllTogether;
+Merge Final (in=a) AllLenderNames (in=b);
+by Lender;
+if a and b;
+run; 
+
+data issname; 
+	 infile dd1;
+     input   @1  pissuer  4.
+             @24 issname  $30.;
+run;
+
+data acctexec; set common.acctexec (rename=issuer=pissuer);
+   if program='SF';
+   keep pissuer acctexec;
+run;
+
+
+proc sort data=issname; 
+by pissuer;
+run;
+
+proc sort data=PutItAllTogether; 
+by pissuer;
+run;
+
+proc sort data=acctexec; 
+by pissuer;
+run;
+
+data Finished; 
+merge PutItAllTogether (in=a) issname (in=b) acctexec(in=c);
+by pissuer;
+if a;
+format rpb 30.2
+       default=30.2;
+DTI=.;
+run;
+
+
+data Finished; 
+set finished (rename=(pissuer=issuer
+					  rpb=upb
+					  Name=LenderName
+									));
+run;
+
+
+/*data test; */
+/*set finished; */
+/*if issuer=3770;*/
+/*run;*/
+
+
+proc freq data=finished;
+ tables firstym PISSUEYM;
+ run;
+
+ proc freq data=finished;
+ tables agency;
+ run;
+
+ proc freq data=acctexec;
+ tables acctexec;
+ run;
+
+ proc freq data=finished;
+ tables acctexec;
+ run;
+
+ proc freq data=finished;
+ tables ficobuc;
+ run;
+
+
+ proc freq data=finished;
+ tables owflag*loans/nocol norow;
+ run;
+
+
+proc export data= finished
+     outfile="/programs/users/rzhou/CorrespondentDashboard/Finished_&sysdate..csv"
+     dbms=csv 
+     replace;
+run;
+
+
+/*Export the data as a CSV for tableau*/
+
+
+/*proc export data= Finished*/
+/*     outfile="/programs/users/pdavine/AdHoc/Lender Analysis/MarchLenderData.csv"*/
+/*     dbms=csv */
+/*     replace;*/
+/*run;*/
+
+
