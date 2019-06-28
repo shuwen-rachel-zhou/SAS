@@ -1,0 +1,426 @@
+/*****************************************************************************/
+/*****************************************************************************/
+/* PROGRAM NAME  : SF Disaster Impact.sas                                    */                               
+/* AUTHOR        : Rachel Zhou                                               */
+/* CREATION DATE : 10/18/2017                                                */                                                                   
+/* PURPOSE       : To generate impacted zone statstics and compare to total  */
+/*                 SF potfolio. -- summarizes the number of impacted loans,  */                                           
+/*                 FIC, RPB (by issuer and agencies) and deliquency.         */ 
+/* INPUT FILES   : /mbsis_data2/loanlvl/issuer                               */
+/*                 /mbsis_data2/b07/issname.dat					  	         */
+/* OUTPUT FILES  : 													         */
+/* CHANGE LOG    :                       		                             */
+/*****************************************************************************/
+/*****************************************************************************/
+
+%include "/programs/users/rzhou/AdHoc/HurricaneUpdate/02122018_Jan18/Harvey.sas";
+%include "/programs/users/rzhou/AdHoc/HurricaneUpdate/02122018_Jan18/Irma.sas";
+%include "/programs/users/rzhou/AdHoc/HurricaneUpdate/02122018_Jan18/Maria.sas";
+
+
+libname loan '/mbsis_data2/loanlvl/issuer';
+libname loanaug "/mbsis_data2/arch/online/lp_201708/";
+libname loansep "/mbsis_data2/arch/online/lp_201709/";
+libname loanoct '/mbsis_data2/arch/online/lp_201710/';
+libname loannov '/mbsis_data2/arch/online/lp_201711/';
+libname loandec '/mbsis_data2/arch/online/lp_201712/';
+/*libname loan '/mbsis_data2/arch/online/lp_201801/';*/
+filename issname disk "/mbsis_data2/b07/issname.dat" lrecl=300;
+
+/*-------------------Impacted Zipcode Loan Level Datasets by Agency--------------------------*/
+
+%macro loansofaug;
+
+Data augloan;
+set loanaug.loanpool;
+
+CDATE = INPUT(PUT(PERIODYM,Z6.),YYMMN6.);
+   FDATE = INPUT(PUT(FIRSTYM,Z6.),YYMMN6.);
+   LDATE = INPUT(PUT(LASTYM,Z6.),YYMMN6.);
+   IF LASTYM = . AND FIRSTYM <= PERIODYM THEN LDATE = INTNX('MONTH', FDATE, -1);
+   ELSE IF LASTYM = . AND FIRSTYM > PERIODYM THEN LDATE = FDATE;
+   IF FIRSTYM > PERIODYM THEN DQTIME = 0;
+   ELSE DQTIME = INTCK('MONTH',LDATE, CDATE);
+
+ if dqtime = 1 then dq1 = 1;
+ if dqtime = 2 then dq2 = 1;
+ if dqtime >= 3 then dq3p = 1;
+
+keep issuer loankey dqtime dq1 dq2 dq3p;
+if ptype in ('AF','AQ','AR','AS','AT','AX','BD','FB','FL','FS','FT','GA','GD','GP','GT','QL','JM','RL','SF','SN','SL','TL','XL'); 
+if state in ("TX", "PR", "VI", "FL", "GA");    /*----To exclude 11 loans in weird states by zip-----*/
+if zip in (%Harvey, %Irma, %Maria);
+run;
+%mend;
+%loansofaug;
+
+%macro loansofsep;
+
+Data seploan;
+set loansep.loanpool;
+
+CDATE = INPUT(PUT(PERIODYM,Z6.),YYMMN6.);
+   FDATE = INPUT(PUT(FIRSTYM,Z6.),YYMMN6.);
+   LDATE = INPUT(PUT(LASTYM,Z6.),YYMMN6.);
+   IF LASTYM = . AND FIRSTYM <= PERIODYM THEN LDATE = INTNX('MONTH', FDATE, -1);
+   ELSE IF LASTYM = . AND FIRSTYM > PERIODYM THEN LDATE = FDATE;
+   IF FIRSTYM > PERIODYM THEN DQTIME = 0;
+   ELSE DQTIME = INTCK('MONTH',LDATE, CDATE);
+
+ if dqtime = 1 then dq1 = 1;
+ if dqtime = 2 then dq2 = 1;
+ if dqtime >= 3 then dq3p = 1;
+
+keep issuer loankey dqtime dq1 dq2 dq3p;
+if ptype in ('AF','AQ','AR','AS','AT','AX','BD','FB','FL','FS','FT','GA','GD','GP','GT','QL','JM','RL','SF','SN','SL','TL','XL'); 
+if state in ("TX", "PR", "VI", "FL", "GA");    /*----To exclude 11 loans in weird states by zip-----*/
+if zip in (%Harvey, %Irma, %Maria);
+run;
+%mend;
+%loansofsep;
+
+%macro loansofoct;
+
+Data octloan;
+set loanoct.loanpool;
+
+CDATE = INPUT(PUT(PERIODYM,Z6.),YYMMN6.);
+   FDATE = INPUT(PUT(FIRSTYM,Z6.),YYMMN6.);
+   LDATE = INPUT(PUT(LASTYM,Z6.),YYMMN6.);
+   IF LASTYM = . AND FIRSTYM <= PERIODYM THEN LDATE = INTNX('MONTH', FDATE, -1);
+   ELSE IF LASTYM = . AND FIRSTYM > PERIODYM THEN LDATE = FDATE;
+   IF FIRSTYM > PERIODYM THEN DQTIME = 0;
+   ELSE DQTIME = INTCK('MONTH',LDATE, CDATE);
+
+ if dqtime = 1 then dq1 = 1;
+ if dqtime = 2 then dq2 = 1;
+ if dqtime >= 3 then dq3p = 1;
+
+keep issuer loankey dqtime dq1 dq2 dq3p;
+if ptype in ('AF','AQ','AR','AS','AT','AX','BD','FB','FL','FS','FT','GA','GD','GP','GT','QL','JM','RL','SF','SN','SL','TL','XL'); 
+if state in ("TX", "PR", "VI", "FL", "GA");    /*----To exclude 11 loans in weird states by zip-----*/
+if zip in (%Harvey, %Irma, %Maria);
+run;
+%mend;
+%loansofoct;
+
+%macro loansofnov;
+
+Data novloan;
+set loannov.loanpool;
+
+CDATE = INPUT(PUT(PERIODYM,Z6.),YYMMN6.);
+   FDATE = INPUT(PUT(FIRSTYM,Z6.),YYMMN6.);
+   LDATE = INPUT(PUT(LASTYM,Z6.),YYMMN6.);
+   IF LASTYM = . AND FIRSTYM <= PERIODYM THEN LDATE = INTNX('MONTH', FDATE, -1);
+   ELSE IF LASTYM = . AND FIRSTYM > PERIODYM THEN LDATE = FDATE;
+   IF FIRSTYM > PERIODYM THEN DQTIME = 0;
+   ELSE DQTIME = INTCK('MONTH',LDATE, CDATE);
+
+ if dqtime = 1 then dq1 = 1;
+ if dqtime = 2 then dq2 = 1;
+ if dqtime >= 3 then dq3p = 1;
+
+keep issuer loankey dqtime dq1 dq2 dq3p;
+if ptype in ('AF','AQ','AR','AS','AT','AX','BD','FB','FL','FS','FT','GA','GD','GP','GT','QL','JM','RL','SF','SN','SL','TL','XL'); 
+if state in ("TX", "PR", "VI", "FL", "GA");    /*----To exclude 11 loans in weird states by zip-----*/
+if zip in (%Harvey, %Irma, %Maria);
+if pissueym <= 201710;
+run;
+%mend;
+%loansofnov;
+
+%macro loansofdec;
+
+Data decloan;
+set loandec.loanpool;
+
+CDATE = INPUT(PUT(PERIODYM,Z6.),YYMMN6.);
+   FDATE = INPUT(PUT(FIRSTYM,Z6.),YYMMN6.);
+   LDATE = INPUT(PUT(LASTYM,Z6.),YYMMN6.);
+   IF LASTYM = . AND FIRSTYM <= PERIODYM THEN LDATE = INTNX('MONTH', FDATE, -1);
+   ELSE IF LASTYM = . AND FIRSTYM > PERIODYM THEN LDATE = FDATE;
+   IF FIRSTYM > PERIODYM THEN DQTIME = 0;
+   ELSE DQTIME = INTCK('MONTH',LDATE, CDATE);
+
+ if dqtime = 1 then dq1 = 1;
+ if dqtime = 2 then dq2 = 1;
+ if dqtime >= 3 then dq3p = 1;
+
+keep issuer loankey dqtime dq1 dq2 dq3p;
+if ptype in ('AF','AQ','AR','AS','AT','AX','BD','FB','FL','FS','FT','GA','GD','GP','GT','QL','JM','RL','SF','SN','SL','TL','XL'); 
+if state in ("TX", "PR", "VI", "FL", "GA");    /*----To exclude 11 loans in weird states by zip-----*/
+if zip in (%Harvey, %Irma, %Maria);
+if pissueym <= 201710;
+run;
+%mend;
+%loansofdec;
+
+
+%macro loansofcurrent;
+
+Data current;
+set loan.loanpool;
+loancnt=1;
+
+CDATE = INPUT(PUT(PERIODYM,Z6.),YYMMN6.);
+   FDATE = INPUT(PUT(FIRSTYM,Z6.),YYMMN6.);
+   LDATE = INPUT(PUT(LASTYM,Z6.),YYMMN6.);
+   IF LASTYM = . AND FIRSTYM <= PERIODYM THEN LDATE = INTNX('MONTH', FDATE, -1);
+   ELSE IF LASTYM = . AND FIRSTYM > PERIODYM THEN LDATE = FDATE;
+   IF FIRSTYM > PERIODYM THEN DQTIME = 0;
+   ELSE DQTIME = INTCK('MONTH',LDATE, CDATE);
+
+ if dqtime = 1 then dq1 = 1;
+ if dqtime = 2 then dq2 = 1;
+ if dqtime >= 3 then dq3p = 1;
+
+keep issuer loankey loancnt pool loanno ltype agency state zip rpb fic dq1 dq2 dq3p dqtime;
+if ptype in ('AF','AQ','AR','AS','AT','AX','BD','FB','FL','FS','FT','GA','GD','GP','GT','QL','JM','RL','SF','SN','SL','TL','XL'); 
+if state in ("TX", "PR", "VI", "FL", "GA");    /*----To exclude 11 loans in weird states by zip-----*/
+if zip in (%Harvey, %Irma, %Maria);
+if pissueym <= 201710;
+run;
+%mend;
+%loansofcurrent;
+
+
+Data augloan; set augloan(rename=(dqtime=adqtime
+                                  dq1=adq1
+								  dq2=adq2
+								  dq3p=adq3p
+								  issuer=aissuer));
+run;
+
+Data seploan; set seploan(rename=(dqtime=sdqtime
+                                  dq1=sdq1
+								  dq2=sdq2
+								  dq3p=sdq3p
+								  issuer=sissuer));
+								  
+run;
+
+Data octloan; set octloan(rename=(dqtime=odqtime
+                                  dq1=odq1
+								  dq2=odq2
+								  dq3p=odq3p
+								  issuer=oissuer));
+								  
+run;
+
+Data novloan; set novloan(rename=(dqtime=ndqtime
+                                  dq1=ndq1
+								  dq2=ndq2
+								  dq3p=ndq3p
+								  issuer=nissuer));
+								  
+run;
+
+Data decloan; set decloan(rename=(dqtime=ddqtime
+                                  dq1=ddq1
+								  dq2=ddq2
+								  dq3p=ddq3p
+								  issuer=dissuer));
+								  
+run;
+
+
+Proc sort data=augloan; By loankey;
+Proc sort data=seploan; By loankey;
+Proc sort data=octloan; By loankey;
+Proc sort data=novloan; By loankey;
+Proc sort data=decloan; By loankey;
+Proc sort data=current; By loankey;
+
+Data fivemloan;
+     merge current (in=a) augloan (in=b) seploan (in=c) octloan (in=d) novloan (in=e) decloan (in=f);
+     by loankey;
+	 if a;
+run;
+
+
+Data FHA RD VA PIH loans;
+  set fivemloan;
+	if agency='F' then output FHA; else
+	if agency='R' then output RD; else
+	if agency='V' then output VA; else
+	if agency='P' then output PIH;
+	Output loans;
+run;
+
+
+/*---------------Impacted loans aggregated by Zip Codes ------------------------------------*/
+
+/*proc freq data=loans;*/
+/*     tables zip;*/
+/*run;*/
+
+
+/*---------------Impacted Zipcode Aggregated by Issuer ------------------------------------*/
+
+Proc sort data=FHA; 
+By issuer;
+proc means sum noprint;
+output out = FHASUM (DROP = _TYPE_ _FREQ_ Rename=(loancnt = Floancnt
+                                                  rpb = Frpb))
+sum = loancnt rpb;
+var loancnt rpb;
+by issuer agency; 
+
+Proc sort data=RD; By issuer;
+proc means sum noprint;
+output out = RDSUM (DROP = _TYPE_ _FREQ_ Rename=(loancnt = Rloancnt
+                                                  rpb = Rrpb))
+sum = loancnt rpb;
+var loancnt rpb;
+by issuer agency; 
+
+Proc sort data=VA; By issuer;
+proc means sum noprint;
+output out = VASUM (DROP = _TYPE_ _FREQ_ Rename=(loancnt = Vloancnt
+                                                  rpb = Vrpb))
+sum = loancnt rpb;
+var loancnt rpb;
+by issuer agency; 
+
+Proc sort data=PIH; By issuer;
+proc means sum noprint;
+output out = PIHSUM (DROP = _TYPE_ _FREQ_ Rename=(loancnt = Ploancnt
+                                                  rpb = Prpb))
+sum = loancnt rpb;
+var loancnt rpb;
+by issuer agency; 
+
+Proc sort data=loans; By issuer state;
+proc means sum noprint;
+output out = SSUM (DROP = _TYPE_ _FREQ_ Rename=(loancnt = Sloancnt
+                                                  rpb = Srpb))
+sum = loancnt rpb fic adq1 adq2 adq3p sdq1 sdq2 sdq3p odq1 odq2 odq3p ndq1 ndq2 ndq3p ddq1 ddq2 ddq3p dq1 dq2 dq3p;
+var loancnt rpb fic adq1 adq2 adq3p sdq1 sdq2 sdq3p odq1 odq2 odq3p ndq1 ndq2 ndq3p ddq1 ddq2 ddq3p dq1 dq2 dq3p;
+by issuer; 
+
+
+/*---------------Latest month's adjusted DQ ratios based on Ginnie's calculation request ------------------------------------*/
+%macro loansofadjust;
+
+Data adjdqcurrent;
+set loan.loanpool;
+loancnt=1;
+
+CDATE = INPUT(PUT(PERIODYM,Z6.),YYMMN6.);
+   FDATE = INPUT(PUT(FIRSTYM,Z6.),YYMMN6.);
+   LDATE = INPUT(PUT(LASTYM,Z6.),YYMMN6.);
+   IF LASTYM = . AND FIRSTYM <= PERIODYM THEN LDATE = INTNX('MONTH', FDATE, -1);
+   ELSE IF LASTYM = . AND FIRSTYM > PERIODYM THEN LDATE = FDATE;
+   IF FIRSTYM > PERIODYM THEN DQTIME = 0;
+   ELSE DQTIME = INTCK('MONTH',LDATE, CDATE);
+
+ if dqtime >= 1 then dq1p = 1;
+ if dqtime >= 2 then dq2p = 1;
+ if dqtime >= 3 then dq3p = 1;
+
+keep issuer loancnt fic dq1p dq2p dq3p dqtime num den;
+if ptype in ('AF','AQ','AR','AS','AT','AX','BD','FB','FL','FS','FT','GA','GD','GP','GT','QL','JM','RL','SF','SN','SL','TL','XL'); 
+if state in ("TX", "PR", "VI", "FL", "GA")    /*----To exclude 11 loans in weird states by zip-----*/
+and pissueym <=201710
+and zip in (%Harvey, %Irma, %Maria) then adjdqflag=1; else adjdqflag=0; 
+if adjdqflag=0; /*----keep only the non hurricane impacted loans-----*/
+if dqtime <0 then dqtime = 0;
+else;
+num =(dqtime * fic);
+den = fic;
+run;
+
+Proc means data=adjdqcurrent nway noprint nonobs;
+	by issuer;
+	VAR dq1p dq2p dq3p loancnt num den;
+	output out=dqratios sum= dq1p dq2p dq3p loancnt num den;
+RUN;
+
+DATA ajdqratios;
+	set dqratios;
+	adq1pratio=dq1p/loancnt;
+	adq2pratio=dq2p/loancnt;
+	adq3pratio=dq3p/loancnt;
+	aDQPratio=num/den;
+	if adq1pratio=. then adq1pratio=0;
+	if adq2pratio=. then adq2pratio=0;
+	if adq3pratio=. then adq3pratio=0;
+	keep issuer adq1pratio adq2pratio adq3pratio aDQPratio;
+run;
+
+%mend;
+%loansofadjust;
+
+/*---------------Total Population Aggregated by Issuer ------------------------------------*/
+
+Data total_pop;
+set loan.loanpool;
+loancnt=1;
+
+CDATE = INPUT(PUT(PERIODYM,Z6.),YYMMN6.);
+   FDATE = INPUT(PUT(FIRSTYM,Z6.),YYMMN6.);
+   LDATE = INPUT(PUT(LASTYM,Z6.),YYMMN6.);
+   IF LASTYM = . AND FIRSTYM <= PERIODYM THEN LDATE = INTNX('MONTH', FDATE, -1);
+   ELSE IF LASTYM = . AND FIRSTYM > PERIODYM THEN LDATE = FDATE;
+   IF FIRSTYM > PERIODYM THEN DQTIME = 0;
+   ELSE DQTIME = INTCK('MONTH',LDATE, CDATE);
+
+if ptype in ('AF','AQ','AR','AS','AT','AX','BD','FB','FL','FS','FT','GA','GD','GP','GT','QL','JM','RL','SF','SN','SL','TL','XL'); 
+if dqtime>0 then dqflag=1;
+else dqflag=0;
+run;
+
+Proc sort data=total_pop; 
+By issuer;
+
+proc means sum noprint;
+output out = TOTSUM (DROP = _TYPE_ _FREQ_ Rename=(loancnt = Tloancnt
+                                                  rpb = Trpb))
+sum = loancnt rpb dqflag;
+var loancnt rpb dqflag;
+by issuer; 
+
+
+
+/*----Merge FHASUM RDSUM VASUM PIHSUM and TOTSUM Issuer Level Datasets (full join)-----------*/
+
+Data imp_loan;
+     merge FHASUM (in=a) RDSUM (in=b) VASUM (in=c) PIHSUM (in=d) SSUM (in=e) ajdqratios (in=f) TOTSUM (in=g);
+     by issuer;
+	 if a or b or c or d or e or f or g;
+	 drop agency state;
+run;
+
+/*-----------Create Issuer Name---------------------------------------------------------------*/
+
+DATA name;
+  INFILE issname;
+  INPUT @1    issuer       4.
+        @24   NAME        $60.
+run;
+
+/*--------Merge Issuer Level Dataset with Issuer Name (left join)----------------------------*/
+
+Data imp_loan2;
+     merge imp_loan (in=a) name (in=b);
+     by issuer;
+	 if a;
+run;
+
+/*-----------------Create Final dataset for reporting ----------------------------------------*/
+
+Data Final;
+     set imp_loan2;
+	 TDQratio=dqflag/Tloancnt;
+	 LOANPCT=Sloancnt/Tloancnt;
+	 RPBPCT=SRPB/TRPB;
+run;
+
+proc sort data=Final; By issuer;
+
+proc print data=Final;
+      var issuer name Sloancnt Floancnt Rloancnt Vloancnt Ploancnt SRPB FRPB RRPB VRPB PRPB FIC 
+          adq1 adq2 adq3p sdq1 sdq2 sdq3p odq1 odq2 odq3p ndq1 ndq2 ndq3p ddq1 ddq2 ddq3p 
+          dq1 dq2 dq3p adq1pratio adq2pratio adq3pratio aDQPratio TDQratio TRPB RPBPCT Tloancnt LOANPCT;
+run;
